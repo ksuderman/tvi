@@ -1,0 +1,22 @@
+; Recursion tests
+
+CODE
+	move 5, _0
+	print "Starting"
+	newl
+	call recurse
+	exit
+	
+PROCBEGIN recurse
+1:	beq _0, 0, 99
+	print "recursion "
+	outp _0
+	newl
+	sub _0, 1, _0
+	call recurse
+	goto 1
+	
+99:	print "done recurion"
+	newl
+
+PROCEND

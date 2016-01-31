@@ -1,0 +1,57 @@
+CODE
+	alloc	4
+	call main
+	print "All done."
+	newl
+	exit
+	
+PROCBEGIN main
+	alloc 4
+1:	print	"Enter a Number (0 to quit): "
+	inp	%0
+	print	"Thank you"
+	newl
+	beq	%0, 0, 0
+
+	print	"Fib("
+	outp	%0
+	print	") = "
+	push	%0
+	call	Fib
+
+	outp	_0			; answer is passed back in _0
+	newl
+	goto	1
+		
+0:	free	4
+PROCEND
+
+PROCBEGIN	Fib
+	alloc	12			
+
+	;; test for base cases Fib(1) and Fib(2)
+	beq	%0, 1, 2
+	beq	%0, 2, 2
+
+	;; calculate Fib(n-1)
+	sub	%0, 1, %4
+	push	%4
+	call	Fib
+	move _0, %4
+	
+	;; calculate Fib(n-2)
+	sub	%0, 2, %8
+	push	%8
+	call	Fib
+	move _0, %8
+	
+	; calculate Fib(n)
+	add	%4, %8, _0
+	goto	3
+
+	; exit with the base case
+2:	move	1, _0
+
+	; clean up the call stack
+3:	free	12	
+PROCEND

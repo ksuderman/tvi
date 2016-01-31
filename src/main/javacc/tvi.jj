@@ -1,0 +1,513 @@
+options {
+    STATIC = false;
+    DEBUG_PARSER = true;
+    DEBUG_LOOKAHEAD = false;
+}
+
+PARSER_BEGIN(TVIParser)
+
+package edu.vassar.cs.cs331.parser;
+
+import java.util.*;
+import edu.vassar.cs.cs331.Opcodes;
+import edu.vassar.cs.cs331.Quadruple;
+import edu.vassar.cs.cs331.Processor;
+
+public class TVIParser
+{
+    protected List<Quadruple> code = new ArrayList<Quadruple>();
+    protected Map<Integer,Integer> labeledInstructions = new HashMap<Integer, Integer>();
+    protected Map<String,Integer> jumpTable = new HashMap<String,Integer>();
+
+    public TVIParser() { super(); }
+
+    public void emit(String s)
+    {
+        //System.out.println(s);
+    }
+}
+
+PARSER_END(TVIParser)
+
+// white space
+//SKIP: {
+//        " "
+//    |   "\t"
+//    |   "\n"
+//    |   "\r"
+//    |   "\f"
+//}
+SKIP: { " " | "\t" }
+
+// comments: Having the compiler insert comments can be handy.
+//SKIP: {
+//    <COMMENT_LINE: ";" (~["\n","\r"])* ("\n"|"\r"|"\r\n")>
+//}
+SKIP: {
+    <COMMENT_LINE: ";" (~["\n","\r"])*>
+}
+SKIP: {
+    <COMMENT_BLOCK: "/*" (~["*"])* "*" ("*" | (~["*","/"] (~["*"])* "*"))* "/">
+}
+
+TOKEN : {
+    <NEWLINE : "\n" | "\r" | "\n\r">
+}
+
+TOKEN : {
+ <INTEGER_LITERAL: <DECIMAL_LITERAL> (["l","L"])? | <HEX_LITERAL> (["l","L"])? | <OCTAL_LITERAL> (["l","L"])?>
+|  <#DECIMAL_LITERAL: ["1"-"9"] (["0"-"9"])*>
+|  <#HEX_LITERAL: "0" ["x","X"] (["0"-"9","a"-"f","A"-"F"])+>
+|  <#OCTAL_LITERAL: "0" (["0"-"7"])*>
+|  <FLOAT_LITERAL: (["0"-"9"])+ "." (["0"-"9"])* (<EXPONENT>)? (["f","F","d","D"])? | "." (["0"-"9"])+ (<EXPONENT>)? (["f","F","d","D"])? | (["0"-"9"])+ <EXPONENT> (["f","F","d","D"])? | (["0"-"9"])+ (<EXPONENT>)? ["f","F","d","D"]>
+|  <#EXPONENT: ["e","E"] (["+","-"])? (["0"-"9"])+>
+|  <CHARACTER_LITERAL: "\'" (~["\'","\\","\n","\r"] | "\\" (["n","t","b","r","f","\\","\'","\""] | ["0"-"7"] (["0"-"7"])? | ["0"-"3"] ["0"-"7"] ["0"-"7"])) "\'">
+|  <STRING_LITERAL: "\"" ( ~["\"","\\","\n","\r"] | "\\" ( ["n","t","b","r","f","\\","\'","\""] | ["0"-"7"] (["0"-"7"])?  | ["0"-"3"] ["0"-"7"] ["0"-"7"] | ( ["\n","\r"] | "\r\n")))* "\"">
+}
+
+TOKEN : {
+    <CODE: "CODE"> |
+    <DATA: "DATA"> |
+    <CALL: "call"> |
+    <PARAM: "param"> |
+    <PUSH: "push"> |
+    <MOVE: "move"> |
+    <LOAD: "load"> |
+    <STORE: "store"> |
+    <ADD: "add"> |
+    <SUB: "sub"> |
+    <MUL: "mul"> |
+    <DIV: "div"> |
+    <FADD: "fadd"> |
+    <FSUB: "fsub"> |
+    <FMUL: "fmul"> |
+    <FDIV: "fdiv"> |
+    <GOTO: "goto"> |
+    <BEQ: "beq"> |
+    <BNE: "bne"> |
+    <BLT: "blt"> |
+    <BLE: "ble"> |
+    <BGT: "bgt"> |
+    <BGE: "bge"> |
+    <INP: "inp"> |
+    <OUTP: "outp"> |
+    <FINP: "finp"> |
+    <FOUTP: "foutp"> |
+    <PRINT: "print"> |
+    <NEWL: "newl"> |
+    <LTOF: "ltof"> |
+    <FTOL: "ftol"> |
+    <DUMP: "dump"> |
+    <ADDRESSOF: "@"> |
+    <ALLOC: "alloc"> |
+    <FREE: "free"> |
+    <DEREF: "^"> |
+    <GLOBAL: "_"> |
+    <LOCAL: "%"> |
+    <COLON: ":"> |
+    <COMMA: ","> |
+    <STRING: "STR"> |
+    <LONG: "LONG"> |
+    <FLOAT: "FLOAT"> |
+    <PROCBEGIN: "PROCBEGIN"> |
+    <PROCEND: "PROCEND"> |
+    <ASSERT: "assert"> |
+    <EXIT: "exit">
+}
+
+TOKEN : { <IDENTIFIER: ["a"-"z","A"-"Z"](["a"-"z","A"-"Z","0"-"9","_"])*> }
+
+
+Processor Program() : {}
+{
+    (<NEWLINE>)* (CodeBlock() | DataBlock() | Procedure())* <EOF>
+    {
+        emit("Program compiled.");
+        emit("Statement count: " + code.size());
+        Processor proc = new Processor(code);
+        proc.setLabeledInstructions(labeledInstructions);
+        proc.setJumpTable(jumpTable);
+        return proc;
+    }
+}
+
+void BlankLines() : {}
+{
+    (<NEWLINE>)+
+}
+
+void DataBlock() : {}
+{
+    <DATA> BlankLines() DataList()
+    {
+
+    }
+}
+
+void DataList() : {}
+{
+    <LONG> BlankLines() IdList()
+    | <STRING> <NEWLINE> IdList()
+    | <FLOAT> <NEWLINE> IdList()
+}
+
+List IdList() :
+{
+    Token id = null;
+    List list = new ArrayList<String>();
+}
+{
+    id=<IDENTIFIER> { list.add(id); } (<COMMA> id=<IDENTIFIER> { list.add(id); })* BlankLines()
+    {
+        emit("List size: " + list.size());
+        return list;
+    }
+}
+
+void CodeBlock() :
+{
+}
+{
+    <CODE> BlankLines() (Statement())+
+    {
+        emit("Parsed a CODE block.");
+    }
+}
+
+void Procedure() :
+{
+    Token name = null;
+    int offset = code.size();
+}
+{
+    <PROCBEGIN> name=<IDENTIFIER> (<NEWLINE>)+ (Statement())+ <PROCEND> BlankLines()
+    {
+        jumpTable.put(name.image, offset);
+        code.add(new Quadruple(TVIParserConstants.PROCEND, null, null, null));
+    }
+}
+
+void Statement() :
+{
+    Token label = null;
+    Quadruple quad = null;
+}
+{
+    [label=<INTEGER_LITERAL><COLON>] quad=Opcode() BlankLines()
+    {
+        if (label != null) {
+            int offset = Integer.parseInt(label.image);
+            //System.out.println("Label: " + offset + " offset: " + code.size());
+            labeledInstructions.put(offset, code.size());
+        }
+        code.add(quad);
+    }
+}
+
+Quadruple _Statement() :
+{
+    Token label=null;
+    Quadruple opcode=null;
+    Operand op=null;
+    Quadruple instruction = null;
+    List<Operand> operands;
+}
+{
+    (label=<INTEGER_LITERAL><COLON>)? opcode=Opcode() operands=Operands() BlankLines()
+    {
+//        int n = Opcodes.getNOperands(opcode.image);
+//        if (n != operands.size()) {
+//            String message = String.format("Wrong number of operands for %s. Expected %d. Found %d", opcode.image, n, operands.size());
+//            throw new RuntimeException(message);
+//        }
+//        instruction = new Quadruple(opcode.kind, operands);
+        if (label != null) {
+            int offset = Integer.parseInt(label.image);
+            labeledInstructions.put(offset, code.size());
+        }
+        return instruction;
+    }
+}
+
+List<Operand> Operands() :
+{
+    Operand op = null;
+    List<Operand> operands = new ArrayList<Operand>();
+}
+{
+    op=Operand() { operands.add(op); } (<COMMA> op=Operand() {operands.add(op);})*
+    {
+        return operands;
+    }
+    |
+    {
+        return operands;
+    }
+}
+
+Quadruple Opcode() :
+{
+    Token t = null;
+    Token value = null;
+    int n = 0;
+    Operand op1=null, op2=null, op3=null;
+}
+{
+    t=<MOVE> op1=Operand() <COMMA> op2=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<LOAD> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<STORE> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<ADD> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<SUB> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<MUL> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<DIV> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<FADD> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<FSUB> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<FMUL> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<FDIV> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<BEQ> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<BNE> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<BLT> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<BLE> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<BGT> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<BGE> op1=Operand() <COMMA> op2=Operand() <COMMA> op3=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<INP> op1=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<OUTP> op1=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<FINP> op1=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<FOUTP> op1=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<PRINT> op1=Operand()
+    {
+        emit("Print op code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<NEWL>
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<LTOF> op1=Operand() <COMMA> op2=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<FTOL> op1=Operand() <COMMA> op2=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<GOTO> op1=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<CALL> op1=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<PARAM>  op1=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<PUSH> op1=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<ALLOC> value=<INTEGER_LITERAL>
+    {
+        n = Integer.parseInt(value.image);
+        return new Quadruple(t.kind, new Literal<Integer>(n), null, null);
+    }
+    | t=<FREE> value=<INTEGER_LITERAL>
+    {
+        emit("OP code is " + t.image);
+        n = Integer.parseInt(value.image);
+        return new Quadruple(t.kind, new Literal<Integer>(n), null, null);
+    }
+    | t=<EXIT>
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, op3);
+    }
+    | t=<ASSERT> op1=Operand() <COMMA> op2=Operand()
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, op1, op2, null);
+    }
+    | t=<DUMP>
+    {
+        emit("OP code is " + t.image);
+        return new Quadruple(t.kind, null, null, null);
+    }
+
+}
+
+Operand Operand() :
+{
+    Token t = null;
+    MemoryAccess op = null;
+    int intValue = 0;
+    float floatValue = 0f;
+}
+{
+    intValue=IntegerValue()
+    {
+        emit("integer literal " + intValue);
+        return new Literal<Integer>(intValue);
+    }
+    | floatValue=FloatValue()
+    {
+        emit("float literal " + floatValue);
+        return new Literal<Float>(floatValue);
+    }
+    | t=<STRING_LITERAL>
+    {
+        return new Literal<String>(t.image);
+    }
+    | t=<IDENTIFIER>
+    {
+        return new Literal<String>(t.image);
+    }
+    | <ADDRESSOF> op=MemoryLocation()
+    {
+        emit("address of");
+        return new AddressOf(op);
+    }
+    | <DEREF> op=MemoryLocation()
+    {
+        emit("deref");
+        return new Dereference(op);
+    }
+    | op=MemoryLocation()
+    {
+        emit("memory access");
+        return op;
+    }
+}
+
+MemoryAccess MemoryLocation() :
+{
+    Token t = null;
+    int offset;
+}
+{
+    <GLOBAL> offset = IntegerValue()
+    {
+        emit("global(" + offset + ")");
+        return new GlobalMemoryAccess(offset);
+    }
+    | <LOCAL> offset=IntegerValue()
+    {
+        emit("local(" + offset + ")");
+        return new LocalMemoryAccess(offset);
+    }
+}
+
+int IntegerValue() :
+{
+    Token t = null;
+}
+{
+    t=<INTEGER_LITERAL>
+    {
+        return Integer.parseInt(t.image);
+    }
+}
+
+float FloatValue() :
+{
+    Token t = null;
+}
+{
+    t=<FLOAT_LITERAL>
+    {
+       return Float.parseFloat(t.image);
+    }
+}
+
+
